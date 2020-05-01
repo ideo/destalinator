@@ -38,7 +38,7 @@ def destalinate_job():
         )
     else:
         try:
-            archiver.Archiver().archive()
+            # archiver.Archiver().archive()
             warner.Warner().warn()
             announcer.Announcer().announce()
             flagger.Flagger().flag()
