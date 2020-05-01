@@ -12,14 +12,16 @@ from utils.with_logger import WithLogger
 
 class Slacker(WithLogger, WithConfig):
 
-    def __init__(self, slack_name, token, init=True):
+    def __init__(self, slack_name, user_token, bot_token, init=True):
         """
         slack name is the short name of the slack (preceding '.slack.com')
         token should be a Slack API Token.
         """
         self.slack_name = slack_name
-        self.token = token
-        assert self.token, "Token should not be blank"
+        self.user_token = user_token
+        self.bot_token = bot_token
+        assert self.user_token, "User token should not be blank"
+        assert self.bot_token, "Bot token should not be blank"
         self.url = self.api_url()
         self.session = requests.Session()
         if init:
@@ -27,7 +29,7 @@ class Slacker(WithLogger, WithConfig):
             self.get_channels()
 
     def get_emojis(self):
-        url = self.url + "emoji.list?token={}".format(self.token)
+        url = self.url + "emoji.list?token={}".format(self.user_token)
         return self.get_with_retry_to_json(url)
 
     def get_users(self):
@@ -38,6 +40,9 @@ class Slacker(WithLogger, WithConfig):
         self.all_restricted_users = set(self.restricted_users + self.ultra_restricted_users)
         self.logger.debug("All restricted user names: %s", ', '.join([self.users_by_id[x] for x in self.all_restricted_users]))
         return users
+
+    def get_users_by_id(self):
+        return self.users_by_id
 
     def asciify(self, text):
         return ''.join([x for x in list(text) if ord(x) in range(128)])
@@ -82,7 +87,7 @@ class Slacker(WithLogger, WithConfig):
         messages = []
         done = False
         while not done:
-            murl = self.url + "channels.history?oldest={}&token={}&channel={}".format(oldest, self.token, cid)
+            murl = self.url + "channels.history?oldest={}&token={}&channel={}".format(oldest, self.user_token, cid)
             if latest:
                 murl += "&latest={}".format(latest)
             else:
@@ -190,7 +195,7 @@ class Slacker(WithLogger, WithConfig):
         url_template = self.url + "channels.info?token={}&channel={}"
         cid = self.get_channelid(channel_name)
         now = int(time.time())
-        url = url_template.format(self.token, cid)
+        url = url_template.format(self.user_token, cid)
         ret = self.get_with_retry_to_json(url)
         if ret['ok'] is not True:
             m = "Attempted to get channel info for {}, but return was {}"
@@ -212,19 +217,31 @@ class Slacker(WithLogger, WithConfig):
             exclude_archived = 1
         else:
             exclude_archived = 0
-        url = url_template.format(exclude_archived, self.token)
+        url = url_template.format(exclude_archived, self.user_token)
         payload = self.get_with_retry_to_json(url)
         assert 'channels' in payload
-        return payload['channels']
+
+        channels = payload['channels']
+        while payload['response_metadata']['next_cursor']:
+            payload = self.get_with_retry_to_json(url + "&cursor=" + payload['response_metadata']['next_cursor'])
+            channels += payload['channels']
+        return channels
 
     def get_all_user_objects(self):
-        url = self.url + "users.list?token=" + self.token
-        return self.get_with_retry_to_json(url)['members']
+        url = self.url + "users.list?token=" + self.user_token
+        payload = self.get_with_retry_to_json(url)
+
+        members = payload['members']
+        while payload['response_metadata']['next_cursor']:
+            payload = self.get_with_retry_to_json(url + "&cursor=" + payload['response_metadata']['next_cursor'])
+            members += payload['members']
+
+        return members
 
     def archive(self, channel_name):
         url_template = self.url + "channels.archive?token={}&channel={}"
         cid = self.get_channelid(channel_name)
-        url = url_template.format(self.token, cid)
+        url = url_template.format(self.user_token, cid)
         request = self.session.post(url)
         payload = request.json()
         return payload
@@ -241,22 +258,17 @@ class Slacker(WithLogger, WithConfig):
             channel = channel[1:]
 
         post_data = {
-            'token': self.token,
+            'token': self.bot_token,
             'channel': channel,
             'text': message.encode('utf-8')
         }
 
-        bot_name = self.config.bot_name
-        bot_avatar_url = self.config.bot_avatar_url
-        if bot_name or bot_avatar_url:
-            post_data['as_user'] = False
-            if bot_name:
-                post_data['username'] = bot_name
-            if bot_avatar_url:
-                post_data['icon_url'] = bot_avatar_url
-
         if message_type:
-            post_data['attachments'] = json.dumps([{'fallback': message_type}], encoding='utf-8')
+            post_data['attachments'] = json.dumps([{'fallback': message_type}])
 
         p = self.session.post(self.url + "chat.postMessage", data=post_data)
-        return p.json()
+        p_json = p.json()
+        if not p_json['ok']:
+            raise ValueError("post failed", p_json)
+
+        return p_json
