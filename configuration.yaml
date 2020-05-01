@@ -8,7 +8,7 @@ slack_name: IDEO
 activated: false
 
 # What should the bot's name be when it posts?
-bot_name: "IDEOAutoArchiver"
+bot_name: "IDEO Auto Archiver"
 
 # What should the bot's avatar be when it posts?
 bot_avatar_url: "https://s3-us-west-1.amazonaws.com/eng-management-docs/bread.png"
