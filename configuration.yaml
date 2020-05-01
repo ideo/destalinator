@@ -57,3 +57,4 @@ included_subtypes:
 
 # When should destalinator run?
 schedule_hour: 4
+TEST_SCHEDULE: true
