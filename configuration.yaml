@@ -36,10 +36,10 @@ ignore_channels:
   - ideo-all
 
 # Regular expression patterns for additional channels to ignore during archiving
-ignore_channel_patterns: null
+ignore_channel_patterns: []
 
 # Users to ignore when considering if a channel is stale
-ignore_users: null
+ignore_users: []
 
 # Which message subtypes count as activity?
 # "None" means the message was typed by a human and is included by default.
