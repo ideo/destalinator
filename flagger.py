@@ -8,10 +8,7 @@ import re
 import time
 import traceback
 
-from utils.util import ignore_channel
-
 # support Python 2 and 3's versions of this module
-
 try:
     import html
     HTML_UNESCAPER = html
@@ -99,10 +96,10 @@ class Flagger(executor.Executor):
         self.control = control
         self.logger.debug("control: %s", json.dumps(self.control, indent=4))
         self.emoji = [x['emoji'] for x in self.control.values()]
-        self.initialize_emoji_aliases(messages)
+        self.initialize_emoji_aliases()
         return True
 
-    def initialize_emoji_aliases(self, messages):
+    def initialize_emoji_aliases(self):
         """
         In some cases, emojiA might be an alias of emojiB
         The problem is that if we say that 2xemojiB should be
@@ -119,36 +116,21 @@ class Flagger(executor.Executor):
         emojis = emojis_response['emoji']
         equivalents = {}
         for emoji in emojis:
-            target_type, target_value = emojis[emoji].split(":", 1)
+            target = emojis[emoji]
+            target_type, target_value = target.split(":", 1)
             if target_type != "alias":
                 continue
-            self.add_equivalent(emoji, equivalents, target_value)
-
-        for message in messages:
-            text = message['text']
-            try:
-                tokens = text.split()
-                if tokens[0] == "alias":
-                    emoji = tokens[1].split(":", 2)[1]
-                    target_value = tokens[2].split(":", 2)[1]
-                    self.add_equivalent(emoji, equivalents, target_value)
-            except Exception as e:
-                tb = traceback.format_exc()
-                m = "Couldn't create flagger alias with text {}: {} {}".format(text, Exception, e)
-                self.logger.warning(m)
-                self.logger.debug(tb)
-
+            self.logger.debug("Found emoji alias: %s <-> %s", emoji, target_value)
+            if emoji not in equivalents:
+                equivalents[emoji] = []
+            if target_value not in equivalents:
+                equivalents[target_value] = []
+            equivalents[emoji].append(target_value)
+            equivalents[target_value].append(emoji)
         self.emoji_equivalents = equivalents
         self.logger.debug("equivalents: %s", json.dumps(self.emoji_equivalents, indent=4))
-
-    def add_equivalent(self, emoji, equivalents, target_value):
-        self.logger.debug("Found emoji alias: %s <-> %s", emoji, target_value)
-        if emoji not in equivalents:
-            equivalents[emoji] = []
-        if target_value not in equivalents:
-            equivalents[target_value] = []
-        equivalents[emoji].append(target_value)
-        equivalents[target_value].append(emoji)
+        if "floppy_disk" in self.emoji_equivalents.keys():
+            self.logger.debug("floppy_disk: %s", self.emoji_equivalents['floppy_disk'])
 
     def message_destination(self, message):
         """
@@ -167,7 +149,7 @@ class Flagger(executor.Executor):
             self.logger.debug("floppy_disk: %s", self.emoji_equivalents['floppy_disk'])
         for reaction in reactions:
             count = reaction['count']
-            current_emoji = reaction['name'].split(":")[0]
+            current_emoji = reaction['name']
             self.logger.debug("current_emoji: %s", current_emoji)
             equivalents = copy.copy(self.emoji_equivalents.get(current_emoji, []))
             self.logger.debug("equivalents: %s", equivalents)
@@ -190,7 +172,6 @@ class Flagger(executor.Executor):
                     comparator = rule['comparator']
                     op = self.operators[comparator]
                     if op(count, threshold):
-                        rule["count"] = count
                         channels.append(rule)
         return channels
 
@@ -202,17 +183,12 @@ class Flagger(executor.Executor):
 
         messages = []
         for channel in self.slacker.channels_by_name:
-            if ignore_channel(self.config, channel):
-                self.logger.debug("Not checking flags for channel: #%s because it's in ignore_channels", channel)
-                continue
-
             cid = self.slacker.get_channelid(channel)
             cur_messages = self.slacker.get_messages_in_time_range(dayago, cid, self.now)
             for message in cur_messages:
                 announce = self.message_destination(message)
                 if announce:
                     messages.append([message, announce])
-
         return messages
 
     def announce_interesting_messages(self):
@@ -225,12 +201,9 @@ class Flagger(executor.Executor):
             text = self.slacker.asciify(message["text"])
             text = self.slacker.detokenize(text)
             url = "http://{}.slack.com/archives/{}/p{}".format(self.config.slack_name, channel, ts)
-            message_format = "*@{}* said in *#{}*:\n _{}_\nThey got *{}* :{}: reactions.\nURL to conversation: (" \
-                             "{})"
+            m = "*@{}* said in *#{}* _'{}'_ ({})".format(author_name, channel, text, url)
             for output_channel in channels:
                 if self.slacker.channel_exists(output_channel["output"]):
-                    m = message_format.format(author_name, channel, text, output_channel["count"], output_channel[
-                        "emoji"], url)
                     md = "Saying {} to {}".format(m, output_channel["output"])
                     self.logger.debug(md)
                     if not self.debug and self.config.activated:  # TODO: rename debug to dry run?

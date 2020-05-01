@@ -25,15 +25,9 @@ class Config(WithLogger):
         else:
             envvar = os.getenv('DESTALINATOR_' + upper_attrname)
         if envvar is not None:
-            # allow certain types (e.g. warning, closure text) to be used as-is
-            if "RAW" in upper_attrname:
-                return envvar
-            else:
-                split_envvar = [x.strip() for x in envvar.split(',') if x] if ',' in envvar else envvar
-                return split_envvar
+            return [x for x in envvar.split(',') if x] if ',' in envvar else envvar
 
-        file_based_config = self.config.get(attrname, '')
-        return file_based_config
+        return self.config.get(attrname, '')
 
     def get(self, attrname, fallback=None):
         return self.config.get(attrname, fallback)

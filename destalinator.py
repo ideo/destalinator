@@ -9,7 +9,6 @@ from config import WithConfig
 import utils
 
 from utils.with_logger import WithLogger
-from utils.util import ignore_channel
 
 # An arbitrary past date, as a default value for the earliest archive date
 PAST_DATE_STRING = '2000-01-01'
@@ -26,8 +25,8 @@ class Destalinator(WithLogger, WithConfig):
         slackbot should be an initialized slackbot.Slackbot() object
         activated is a boolean indicating whether destalinator should do dry runs or real runs
         """
-        self.closure_text = self.config.closure_text_raw or utils.get_local_file_content(self.closure_text_fname)
-        self.warning_text = self.config.warning_text_raw or utils.get_local_file_content(self.warning_text_fname)
+        self.closure_text = utils.get_local_file_content(self.closure_text_fname)
+        self.warning_text = utils.get_local_file_content(self.warning_text_fname)
         self.slacker = slacker
         self.slackbot = slackbot
 
@@ -93,6 +92,15 @@ class Destalinator(WithLogger, WithConfig):
 
         return messages
 
+    def ignore_channel(self, channel_name):
+        """Return True if `channel_name` is a channel we should ignore based on config settings."""
+        if channel_name in self.config.ignore_channels:
+            return True
+        for pat in self.config.ignore_channel_patterns:
+            if re.search(pat, channel_name):
+                return True
+        return False
+
     def post_marked_up_message(self, channel_name, message, **kwargs):
         self.slacker.post_message(channel_name, self.add_slack_channel_markup(message), **kwargs)
 
@@ -104,7 +112,7 @@ class Destalinator(WithLogger, WithConfig):
         if not self.channel_minimum_age(channel_name, days):
             return False
 
-        if ignore_channel(self.config, channel_name):
+        if self.ignore_channel(channel_name):
             return False
 
         if self.slacker.channel_has_only_restricted_members(channel_name):
@@ -130,7 +138,7 @@ class Destalinator(WithLogger, WithConfig):
     def archive(self, channel_name):
         """Archive the given channel name, returning the Slack API response as a JSON string."""
         # Might not need to do this since we now do this in `stale`
-        if ignore_channel(self.config, channel_name):
+        if self.ignore_channel(channel_name):
             self.logger.debug("Not archiving #%s because it's in ignore_channels", channel_name)
             return
 
@@ -193,7 +201,7 @@ class Destalinator(WithLogger, WithConfig):
             return False
 
         # Might not need to do this since we now do this in `stale`
-        if ignore_channel(self.config, channel_name):
+        if self.ignore_channel(channel_name):
             self.logger.debug("Not warning #%s because it's in ignore_channels", channel_name)
             return False
 
@@ -220,7 +228,7 @@ class Destalinator(WithLogger, WithConfig):
 
         stale = []
         for channel in sorted(self.slacker.channels_by_name.keys()):
-            if ignore_channel(self.config, channel):
+            if self.ignore_channel(channel):
                 self.logger.debug("Not warning #%s because it's in ignore_channels", channel)
                 continue
             if self.stale(channel, days):

@@ -7,7 +7,6 @@ import warner
 import archiver
 import announcer
 import flagger
-import stats
 from config import get_config
 
 
@@ -31,10 +30,10 @@ def destalinate_job():
     raven_client = RavenClient()
 
     logging.info("Destalinating")
-    if not get_config().sb_token or not get_config().api_user_token or not get_config().api_bot_token:
+    if not get_config().sb_token or not get_config().api_token:
         logging.error(
             "Missing at least one required Slack environment variable.\n"
-            "Make sure to set DESTALINATOR_SB_TOKEN and DESTALINATOR_API_USER_TOKEN and DESTALINATOR_API_BOT_TOKEN."
+            "Make sure to set DESTALINATOR_SB_TOKEN and DESTALINATOR_API_TOKEN."
         )
     else:
         try:
@@ -42,7 +41,6 @@ def destalinate_job():
             warner.Warner().warn()
             announcer.Announcer().announce()
             flagger.Flagger().flag()
-            stats.Stats().stats()
             logging.info("OK: destalinated")
         except Exception as e:  # pylint: disable=W0703
             raven_client.captureException()
