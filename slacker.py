@@ -229,6 +229,7 @@ class Slacker(WithLogger, WithConfig):
 
     def get_all_user_objects(self):
         url = self.url + "users.list?token=" + self.user_token
+        self.logger.debug(url)
         payload = self.get_with_retry_to_json(url)
         self.logger.debug(payload)
         members = payload['members']
