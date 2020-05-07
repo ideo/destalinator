@@ -17,7 +17,7 @@ bot_avatar_url: "https://s3-us-west-1.amazonaws.com/eng-management-docs/bread.pn
 warn_threshold: 30
 
 # Days of silence before we auto-archive a channel
-archive_threshold: 360
+archive_threshold: 60
 
 # Where should we post "general" announcement messages?
 general_message_channel: "ideo-destalinator"
